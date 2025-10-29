@@ -231,7 +231,7 @@ partition_disk_bootloader_only() {
     echo "+${bootloader_size}M" #set partition size
     echo t #change partition type
     echo #accept default parition number
-    echo 0FC63DAF-8483-4772-8E79-3D69D8477DE4 #standard Linux filesystem type (not ChromeOS)
+    echo 3CB8E202-3B7E-47DD-8A3C-7FF2A13CFCEC #chromeos rootfs type
 
     #write changes (no rootfs partition)
     echo w
@@ -260,12 +260,22 @@ populate_partitions_bootloader_only() {
   local git_tag="$(git tag -l --contains HEAD)"
   local git_hash="$(git rev-parse --short HEAD)"
 
-  #mount and write empty file to stateful
+  #mount and write to stateful partition
   local stateful_mount=/tmp/shim_stateful
   safe_mount "${image_loop}p1" $stateful_mount
   mkdir -p $stateful_mount/dev_image/etc/
   mkdir -p $stateful_mount/dev_image/factory/sh
   touch $stateful_mount/dev_image/etc/lsb-factory
+  
+  # Create a dummy factory install script that does nothing
+  # This prevents the kernel from aborting when it can't find installation files
+  echo '#!/bin/sh' > $stateful_mount/dev_image/factory/sh/factory_install.sh
+  echo 'exit 0' >> $stateful_mount/dev_image/factory/sh/factory_install.sh
+  chmod +x $stateful_mount/dev_image/factory/sh/factory_install.sh
+  
+  # Create marker to indicate factory install already completed
+  touch $stateful_mount/.factory_test_complete
+  
   umount $stateful_mount
 
   #mount and write to bootloader rootfs
