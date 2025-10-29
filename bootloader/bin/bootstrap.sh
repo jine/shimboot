@@ -387,21 +387,11 @@ boot_chromeos() {
 }
 
 main() {
-  echo "SHIMBOOT: Bootstrap.sh starting..." > /dev/console
   echo "starting the shimboot bootloader"
-
-  # Disable Chrome OS recovery mode checks
-  # Create marker files to prevent recovery installation scripts from running
-  echo "SHIMBOOT: Creating recovery disable markers..." > /dev/console
-  mkdir -p /tmp
-  touch /tmp/.recovery_mode_disabled
-  touch /root/.factory_installer_run
-  
   enable_debug_console "$TTY2"
 
   # Auto-boot /dev/mmcblk1p4 without user interaction
   local target="/dev/mmcblk1p4"
-  echo "SHIMBOOT: Automatically booting $target" > /dev/console
   echo "automatically booting $target"
   boot_target "$target"
 }

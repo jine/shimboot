@@ -82,8 +82,6 @@ safe_mount() {
 create_partitions() {
   local image_loop=$(realpath -m "${1}")
   local kernel_path=$(realpath -m "${2}")
-  local is_luks="${3}"
-  local crypt_password="${4}"
 
   #create stateful
   mkfs.ext4 "${image_loop}p1"
@@ -93,13 +91,7 @@ create_partitions() {
   #create bootloader partition
   mkfs.ext2 "${image_loop}p3"
   #create rootfs partition
-  if [ "$is_luks" ]; then
-    echo "$crypt_password" | cryptsetup luksFormat "${image_loop}p4"
-    echo "$crypt_password" | cryptsetup luksOpen "${image_loop}p4" rootfs
-    mkfs.ext4 /dev/mapper/rootfs
-  else 
-    mkfs.ext4 "${image_loop}p4"
-  fi
+  mkfs.ext4 "${image_loop}p4"
 }
 
 populate_partitions() {
@@ -107,18 +99,27 @@ populate_partitions() {
   local bootloader_dir=$(realpath -m "${2}")
   local rootfs_dir=$(realpath -m "${3}")
   local quiet="$4"
-  local luks_enabled="$5"
 
   #figure out if we are on a stable release
   local git_tag="$(git tag -l --contains HEAD)"
   local git_hash="$(git rev-parse --short HEAD)"
 
-  #mount and write empty file to stateful
+  #mount and write to stateful
   local stateful_mount=/tmp/shim_stateful
   safe_mount "${image_loop}p1" $stateful_mount
   mkdir -p $stateful_mount/dev_image/etc/
   mkdir -p $stateful_mount/dev_image/factory/sh
   touch $stateful_mount/dev_image/etc/lsb-factory
+  
+  # Create a dummy factory install script that does nothing
+  # This prevents the kernel from aborting when it can't find installation files
+  echo '#!/bin/sh' > $stateful_mount/dev_image/factory/sh/factory_install.sh
+  echo 'exit 0' >> $stateful_mount/dev_image/factory/sh/factory_install.sh
+  chmod +x $stateful_mount/dev_image/factory/sh/factory_install.sh
+  
+  # Create marker to indicate factory install already completed
+  touch $stateful_mount/.factory_test_complete
+  
   umount $stateful_mount
 
   #mount and write to bootloader rootfs
@@ -132,11 +133,7 @@ populate_partitions() {
 
   #write rootfs to image
   local rootfs_mount=/tmp/new_rootfs
-  if [ "$luks_enabled" ]; then
-    safe_mount /dev/mapper/rootfs $rootfs_mount
-  else
-    safe_mount "${image_loop}p4" $rootfs_mount
-  fi
+  safe_mount "${image_loop}p4" $rootfs_mount
 
   if [ "$quiet" ]; then
     cp -ar $rootfs_dir/* $rootfs_mount
@@ -144,9 +141,6 @@ populate_partitions() {
     copy_progress $rootfs_dir $rootfs_mount
   fi
   umount $rootfs_mount
-  if [ "$luks_enabled" ]; then
-    cryptsetup close rootfs
-  fi
 }
 
 create_image() {

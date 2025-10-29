@@ -179,10 +179,16 @@ if [ ! -f "$shim_bin" ]; then
   fi
 fi
 
-print_title "building final disk image (bootloader only, no rootfs)"
+print_title "creating minimal dummy rootfs (bootloader-only mode)"
+rootfs_dir="$(realpath -m data/minimal_rootfs)"
+rm -rf "$rootfs_dir"
+chmod +x ./create_minimal_rootfs.sh
+./create_minimal_rootfs.sh "$rootfs_dir"
+
+print_title "building final disk image"
 final_image="$data_dir/shimboot_$board.bin"
 rm -rf $final_image
-retry_cmd ./build.sh $final_image $shim_bin "quiet=$quiet" "arch=$arch"
+retry_cmd ./build.sh $final_image $shim_bin $rootfs_dir "quiet=$quiet" "arch=$arch" "name=bootloader_only"
 print_info "build complete! the final disk image is located at $final_image"
 
 print_title "cleaning up"
