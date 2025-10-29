@@ -189,3 +189,91 @@ copy_progress() {
   mkdir -p "$destination"
   tar -cf - -C "${source}" . | pv -f -s $total_bytes | tar -xf - -C "${destination}"
 }
+
+# Bootloader-only functions (no rootfs partition)
+create_image_bootloader_only() {
+  local image_path=$(realpath -m "${1}")
+  local bootloader_size="$2"
+  
+  #stateful + kernel + bootloader (no rootfs)
+  local total_size=$((1 + 32 + $bootloader_size))
+  rm -rf "${image_path}"
+  fallocate -l "${total_size}M" "${image_path}"
+  partition_disk_bootloader_only $image_path $bootloader_size
+}
+
+partition_disk_bootloader_only() {
+  local image_path=$(realpath -m "${1}")
+  local bootloader_size="$2"
+  #create partition table with fdisk
+  ( 
+    echo g #new gpt disk label
+
+    #create 1MB stateful
+    echo n #new partition
+    echo #accept default parition number
+    echo #accept default first sector
+    echo +1M #partition size is 1M
+
+    #create 32MB kernel partition
+    echo n
+    echo #accept default parition number
+    echo #accept default first sector
+    echo +32M #partition size is 32M
+    echo t #change partition type
+    echo #accept default parition number
+    echo FE3A2A5D-4F32-41A7-B725-ACCC3285A309 #chromeos kernel type
+
+    #create bootloader partition
+    echo n
+    echo #accept default parition number
+    echo #accept default first sector
+    echo "+${bootloader_size}M" #set partition size
+    echo t #change partition type
+    echo #accept default parition number
+    echo 3CB8E202-3B7E-47DD-8A3C-7FF2A13CFCEC #chromeos rootfs type
+
+    #write changes (no rootfs partition)
+    echo w
+  ) | fdisk $image_path > /dev/null
+}
+
+create_partitions_bootloader_only() {
+  local image_loop=$(realpath -m "${1}")
+  local kernel_path=$(realpath -m "${2}")
+
+  #create stateful
+  mkfs.ext4 "${image_loop}p1"
+  #copy kernel
+  dd if=$kernel_path of="${image_loop}p2" bs=1M oflag=sync
+  make_bootable $image_loop
+  #create bootloader partition
+  mkfs.ext2 "${image_loop}p3"
+}
+
+populate_partitions_bootloader_only() {
+  local image_loop=$(realpath -m "${1}")
+  local bootloader_dir=$(realpath -m "${2}")
+  local quiet="$3"
+
+  #figure out if we are on a stable release
+  local git_tag="$(git tag -l --contains HEAD)"
+  local git_hash="$(git rev-parse --short HEAD)"
+
+  #mount and write empty file to stateful
+  local stateful_mount=/tmp/shim_stateful
+  safe_mount "${image_loop}p1" $stateful_mount
+  mkdir -p $stateful_mount/dev_image/etc/
+  mkdir -p $stateful_mount/dev_image/factory/sh
+  touch $stateful_mount/dev_image/etc/lsb-factory
+  umount $stateful_mount
+
+  #mount and write to bootloader rootfs
+  local bootloader_mount="/tmp/shim_bootloader"
+  safe_mount "${image_loop}p3" "$bootloader_mount"
+  cp -arv $bootloader_dir/* "$bootloader_mount"
+  if [ ! "$git_tag" ]; then #mark it as a dev version if needed
+    printf "$git_hash" > "$bootloader_mount/opt/.shimboot_version_dev"
+  fi
+  umount "$bootloader_mount"
+}

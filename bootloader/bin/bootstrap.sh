@@ -391,16 +391,10 @@ main() {
 
   enable_debug_console "$TTY2"
 
-  local valid_partitions="$(find_all_partitions)"
-
-  while true; do
-    clear
-    print_selector "${valid_partitions}"
-
-    if get_selection "${valid_partitions}"; then
-      break
-    fi
-  done
+  # Auto-boot /dev/mmcblk1p4 without user interaction
+  local target="/dev/mmcblk1p4"
+  echo "automatically booting $target"
+  boot_target "$target"
 }
 
 trap - EXIT
