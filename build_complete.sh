@@ -70,7 +70,6 @@ sigint_handler() {
 trap sigint_handler SIGINT
 
 shim_url="" #set this if you want to download from a third party mirror
-boards_url="https://chromiumdash.appspot.com/cros/fetch_serving_builds?deviceCategory=ChromeOS"
 
 if [ -z "$data_dir" ]; then
   data_dir="$base_dir/data"
@@ -78,33 +77,9 @@ else
   data_dir="$(realpath -m "$data_dir")"
 fi
 
-print_title "downloading list of recovery images"
-reco_url="$(wget -qO- --show-progress $boards_url | python3 -c '
-import json, sys
-
-all_builds = json.load(sys.stdin)
-board_name = sys.argv[1]
-if not board_name in all_builds["builds"]:
-  print("Invalid board name: " + board_name, file=sys.stderr)
-  sys.exit(1)
-  
-board = all_builds["builds"][board_name]
-if "models" in board:
-  for device in board["models"].values():
-    if device["pushRecoveries"]:
-      board = device
-      break
-
-reco_url = list(board["pushRecoveries"].values())[-1]
-print(reco_url)
-' $board)"
-print_info "found url: $reco_url"
-
 shim_bin="$data_dir/shim_$board.bin"
 shim_zip="$data_dir/shim_$board.zip"
 shim_dir="$data_dir/shim_${board}_chunks"
-reco_bin="$data_dir/reco_$board.bin"
-reco_zip="$data_dir/reco_$board.zip"
 mkdir -p "$data_dir"
 
 extract_zip() {
@@ -194,9 +169,6 @@ retry_cmd() {
     $cmd && break
   done
 }
-
-print_title "downloading recovery image"
-download_and_unzip "$reco_url" "$reco_zip" "$reco_bin"
 
 print_title "downloading shim image"
 if [ ! -f "$shim_bin" ]; then
