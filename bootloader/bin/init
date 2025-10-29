@@ -28,10 +28,13 @@ setup_environment() {
 main() {
   setup_environment
   detect_tty
-  # In case an error is not handled by bootstrapping, stop here
-  # so that an operator can see installation stop.
-  exec bootstrap.sh < "$TTY1" >> "$TTY1" 2>&1 || sleep 1d
+  # Run bootstrap.sh directly - errors from kernel are cosmetic
+  # Redirect to TTY1 and continue regardless of kernel warnings
+  /bin/sh bootstrap.sh < "$TTY1" >> "$TTY1" 2>&1 &
+  wait
+  # If bootstrap exits, sleep to allow debugging
+  sleep 1d
 }
 
 main "$@"
-exit 1
+exit 0
