@@ -390,10 +390,23 @@ main() {
   echo "starting the shimboot bootloader"
   enable_debug_console "$TTY2"
 
-  # Auto-boot /dev/mmcblk1p4 without user interaction
-  local target="/dev/mmcblk1p4"
-  echo "automatically booting $target"
-  boot_target "$target"
+  # Auto-select option 1 from detected partitions
+  local rootfs_partitions="$(find_all_partitions)"
+  
+  if [ ! "${rootfs_partitions}" ]; then
+    echo "ERROR: no bootable partitions found"
+    sleep 10
+    reboot -f
+  fi
+  
+  # Extract the first partition from the list
+  local first_partition=$(echo "$rootfs_partitions" | head -n 1)
+  local part_path=$(echo $first_partition | cut -d ":" -f 1)
+  local part_name=$(echo $first_partition | cut -d ":" -f 2)
+  
+  echo "automatically booting option 1: $part_name on $part_path"
+  sleep 2
+  boot_target "$part_path"
 }
 
 trap - EXIT
