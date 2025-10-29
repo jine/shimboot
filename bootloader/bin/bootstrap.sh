@@ -50,7 +50,15 @@ find_rootfs_partitions() {
     return 1
   fi
 
+  # Get the boot disk (where we're running from) to exclude it
+  local boot_disk=$(rootdev -s -d 2>/dev/null || echo "/dev/sda")
+
   for disk in $disks; do
+    # Skip the USB drive we're booting from
+    if [ "$disk" = "$boot_disk" ]; then
+      continue
+    fi
+    
     local partitions=$(fdisk -l $disk | sed -n "s/^[ ]\+\([0-9]\+\).*shimboot_rootfs:\(.*\)$/\1:\2/p")
     if [ ! "${partitions}" ]; then
       continue
