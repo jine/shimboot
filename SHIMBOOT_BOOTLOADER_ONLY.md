@@ -39,8 +39,8 @@ This workflow gives you:
 
 ### Removed Features
 - Interactive OS selector menu
-- Rootfs building (`build_rootfs.sh` and `patch_rootfs.sh` are not used)
-- Support for Debian, Ubuntu, and Alpine installations
+- Full rootfs building (`build_rootfs.sh` and `patch_rootfs.sh` replaced with minimal dummy rootfs)
+- Support for Debian, Ubuntu, and Alpine full installations
 - LUKS encryption options
 - Desktop environment selection
 - ChromeOS boot support
@@ -53,21 +53,24 @@ This workflow gives you:
    - Direct boot without partition scanning
 
 2. **build.sh**
-   - Simplified to require only 2 arguments: `output_path` and `shim_path`
-   - No longer requires a `rootfs_dir` parameter
-   - Creates only bootloader partitions (stateful, kernel, bootloader)
+   - Requires standard 3 arguments: `output_path`, `shim_path`, and `rootfs_dir`
+   - Uses minimal rootfs created by `create_minimal_rootfs.sh`
+   - Creates full 4-partition structure (required by ChromeOS kernel)
 
 3. **build_complete.sh**
    - Removed rootfs-related parameters (`desktop`, `distro`, `release`, `luks`, etc.)
-   - Skips `build_rootfs.sh` and `patch_rootfs.sh` calls
+   - Calls `create_minimal_rootfs.sh` instead of `build_rootfs.sh`
    - Reduced dependencies (no `debootstrap`, `cryptsetup`, or `qemu-user-static`)
 
-4. **image_utils.sh**
-   - New bootloader-only functions that create 3-partition images instead of 4
-   - `create_image_bootloader_only()`
-   - `partition_disk_bootloader_only()`
-   - `create_partitions_bootloader_only()`
-   - `populate_partitions_bootloader_only()`
+4. **create_minimal_rootfs.sh**
+   - Creates a tiny (~1MB) dummy rootfs with basic directory structure
+   - Satisfies ChromeOS kernel's 4-partition requirement
+   - Contains only essential skeleton (no actual OS or utilities)
+
+5. **image_utils.sh**
+   - Simplified `create_partitions()` and `populate_partitions()` (removed LUKS)
+   - Adds dummy `factory_install.sh` script to prevent ChromeOS factory installer errors
+   - Maintains full 4-partition shimboot structure
 
 ## Build Instructions
 
@@ -119,6 +122,7 @@ sudo ./build.sh shimboot_dedede.bin shim_dedede.bin arch=amd64
 **build.sh:**
 - `output_path` - Path for the output disk image
 - `shim_path` - Path to the Chrome OS RMA shim image
+- `rootfs_dir` - Path to the minimal rootfs directory (created by `create_minimal_rootfs.sh`)
 - `arch` - CPU architecture: `amd64` (default) or `arm64`
 - `quiet` - Suppress progress indicators (optional)
 
@@ -144,13 +148,16 @@ The bootloader is currently hardcoded to boot `/dev/mmcblk1p4`. To change this:
 
 ## Image Structure
 
-The bootloader-only image contains 3 partitions:
+The bootloader-only image contains 4 partitions (full shimboot structure):
 
-1. **Partition 1**: 1MB stateful partition (dummy)
+1. **Partition 1**: 1MB stateful partition (contains dummy `factory_install.sh`)
 2. **Partition 2**: 32MB Chrome OS kernel
 3. **Partition 3**: 20MB bootloader partition
+4. **Partition 4**: ~1MB minimal dummy rootfs (skeleton filesystem)
 
-Total size: ~53MB (compared to several GB for a full Shimboot image)
+**Why 4 partitions?** The ChromeOS kernel expects the full shimboot partition layout. Without partition 4, the kernel detects the USB as an installation source and shows "Factory installation aborted" errors. The minimal rootfs satisfies this requirement while keeping the image small.
+
+Total size: ~100MB (compared to several GB for a full Shimboot image)
 
 ## Booting the Image
 
@@ -189,6 +196,11 @@ This makes the USB key function as a true "boot key" - insert it to boot Linux, 
 - This is a normal binwalk warning when extracting the Chrome OS kernel
 - The important components (kernel and initramfs) extract successfully
 - You can safely ignore this warning - it won't affect the bootloader
+
+### "Factory installation aborted" error
+- This means the ChromeOS kernel couldn't find the expected 4-partition structure
+- Ensure you're using the latest build scripts that create the minimal rootfs
+- The image must have all 4 partitions, even if partition 4 is just a dummy
 
 ### Boot fails with "mounting rootfs failed"
 - Verify the target partition exists and contains a valid Linux rootfs
@@ -233,12 +245,15 @@ To return to the full interactive Shimboot with rootfs support:
 ### Boot Process
 
 1. Chrome OS kernel loads from partition 2
-2. Kernel extracts and runs the patched initramfs (bootloader)
-3. `bootloader/bin/bootstrap.sh` executes as init (PID 1)
-4. Bootstrap script mounts `/dev/mmcblk1p4` as `/newroot`
-5. Script moves `/sys`, `/proc`, `/dev` to newroot
-6. `pivot_root` switches to the new rootfs
-7. Control transfers to `/sbin/init` in the target partition
+2. Kernel checks for 4-partition shimboot structure (partitions 1-4 on USB)
+3. Kernel extracts and runs the patched initramfs (bootloader from partition 3)
+4. `bootloader/bin/bootstrap.sh` executes as init (PID 1)
+5. Bootstrap script skips menu and directly mounts `/dev/mmcblk1p4` (internal storage) as `/newroot`
+6. Script moves `/sys`, `/proc`, `/dev` to newroot
+7. `pivot_root` switches to the new rootfs
+8. Control transfers to `/sbin/init` in the target partition on internal storage
+
+**Note:** Partition 4 on the USB contains a dummy minimal rootfs that is never actually booted - it exists only to satisfy the ChromeOS kernel's partition structure requirements.
 
 ### Dependencies Not Required
 
