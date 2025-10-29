@@ -8,7 +8,8 @@
 
 #original: https://chromium.googlesource.com/chromiumos/platform/initramfs/+/refs/heads/main/factory_shim/init
 
-set -x
+# Disable debugging to suppress factory installer errors
+set +x
 
 detect_tty() {
   if [ -f "/bin/frecon-lite" ]; then
@@ -23,17 +24,25 @@ detect_tty() {
 setup_environment() {
   # Install additional utility programs.
   /bin/busybox --install /bin || true
+  
+  # Immediately prevent factory installer from running
+  # Create marker files before anything else
+  mkdir -p /tmp /root
+  touch /tmp/.factory_installer_disabled
+  touch /root/.factory_test
+  export FACTORY_OMAHA_URL=""
+  export DISABLE_FACTORY_INSTALLER=1
 }
 
 main() {
   setup_environment
   detect_tty
-  # Run bootstrap.sh directly - errors from kernel are cosmetic
-  # Redirect to TTY1 and continue regardless of kernel warnings
-  /bin/sh bootstrap.sh < "$TTY1" >> "$TTY1" 2>&1 &
-  wait
-  # If bootstrap exits, sleep to allow debugging
-  sleep 1d
+  
+  # Skip directly to our bootstrap, bypassing all factory installer logic
+  echo "Shimboot: Bypassing factory installer, booting custom OS..." > "$TTY1"
+  
+  # Execute bootstrap directly
+  exec /bin/sh /bin/bootstrap.sh < "$TTY1" >> "$TTY1" 2>&1
 }
 
 main "$@"
