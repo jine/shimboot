@@ -8,8 +8,8 @@
 
 #original: https://chromium.googlesource.com/chromiumos/platform/initramfs/+/refs/heads/main/factory_shim/init
 
-# Disable debugging to suppress factory installer errors
-set +x
+# Enable debugging to see what's happening
+set -x
 
 detect_tty() {
   if [ -f "/bin/frecon-lite" ]; then
@@ -22,28 +22,35 @@ detect_tty() {
 }
 
 setup_environment() {
+  echo "SHIMBOOT: Setting up environment..." > /dev/console
   # Install additional utility programs.
   /bin/busybox --install /bin || true
   
   # Immediately prevent factory installer from running
   # Create marker files before anything else
+  echo "SHIMBOOT: Creating factory installer disable markers..." > /dev/console
   mkdir -p /tmp /root
   touch /tmp/.factory_installer_disabled
   touch /root/.factory_test
   export FACTORY_OMAHA_URL=""
   export DISABLE_FACTORY_INSTALLER=1
+  echo "SHIMBOOT: Environment setup complete" > /dev/console
 }
 
 main() {
+  echo "SHIMBOOT: Init script starting..." > /dev/console
   setup_environment
   detect_tty
   
   # Skip directly to our bootstrap, bypassing all factory installer logic
-  echo "Shimboot: Bypassing factory installer, booting custom OS..." > "$TTY1"
+  echo "SHIMBOOT: Bypassing factory installer, booting custom OS..." > /dev/console
+  echo "SHIMBOOT: Bypassing factory installer, booting custom OS..." > "$TTY1"
   
   # Execute bootstrap directly
+  echo "SHIMBOOT: Executing bootstrap.sh..." > /dev/console
   exec /bin/sh /bin/bootstrap.sh < "$TTY1" >> "$TTY1" 2>&1
 }
 
+echo "SHIMBOOT: /init called with args: $@" > /dev/console
 main "$@"
 exit 0
