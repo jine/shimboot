@@ -231,7 +231,7 @@ partition_disk_bootloader_only() {
     echo "+${bootloader_size}M" #set partition size
     echo t #change partition type
     echo #accept default parition number
-    echo 3CB8E202-3B7E-47DD-8A3C-7FF2A13CFCEC #chromeos rootfs type
+    echo 0FC63DAF-8483-4772-8E79-3D69D8477DE4 #standard Linux filesystem type (not ChromeOS)
 
     #write changes (no rootfs partition)
     echo w
