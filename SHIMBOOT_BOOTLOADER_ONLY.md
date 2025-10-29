@@ -95,6 +95,8 @@ Example:
 sudo ./build_complete.sh dedede arch=amd64
 ```
 
+**Note:** The first build will download the Chrome OS shim image (~4GB). This is cached in `./data/shim_<board>.bin`, so subsequent builds for the same board will be instant. You may see a binwalk warning during extraction - this is normal and can be ignored.
+
 #### Option 2: Manual Build (Using existing shim)
 ```bash
 sudo ./build.sh <output_path> <shim_path> arch=<arch>
@@ -182,6 +184,11 @@ Once you've successfully booted with `Ctrl + U` a few times, the Chromebook may 
 This makes the USB key function as a true "boot key" - insert it to boot Linux, remove it to boot Chrome OS.
 
 ## Troubleshooting
+
+### "WARNING: One or more files failed to extract" during build
+- This is a normal binwalk warning when extracting the Chrome OS kernel
+- The important components (kernel and initramfs) extract successfully
+- You can safely ignore this warning - it won't affect the bootloader
 
 ### Boot fails with "mounting rootfs failed"
 - Verify the target partition exists and contains a valid Linux rootfs
